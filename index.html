@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#bcddf3" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#172026" media="(prefers-color-scheme: dark)" />
+    <meta
+      name="description"
+      content="AirWise shows live air quality for your city, a 48-hour outlook and plain-language health advice, and answers questions like whether it is a good time for a run."
+    />
+    <title>AirWise: air quality advice for your city</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <script type="module" src="/src/main.ts"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to main content</a>
+
+    <header class="masthead wrap">
+      <div class="brand">
+        <h1 class="wordmark">AirWise</h1>
+        <p class="tagline">Air quality advice for your city</p>
+      </div>
+      <fieldset class="scale-switch" id="standard-switch">
+        <legend>AQI scale</legend>
+        <label><input type="radio" name="standard" value="us" /><span>US EPA</span></label>
+        <label><input type="radio" name="standard" value="in" /><span>India CPCB</span></label>
+      </fieldset>
+    </header>
+
+    <main id="main" tabindex="-1">
+      <section class="finder wrap" aria-labelledby="finder-title">
+        <h2 id="finder-title" class="visually-hidden">Choose a place</h2>
+        <form id="search-form" role="search" novalidate>
+          <label for="city" class="finder-label">City or town</label>
+          <div class="finder-row">
+            <input
+              id="city"
+              name="city"
+              type="search"
+              inputmode="search"
+              autocomplete="address-level2"
+              maxlength="80"
+              spellcheck="false"
+              aria-describedby="search-status"
+              required
+            />
+            <button type="submit" class="button">Search</button>
+            <button type="button" id="locate" class="button button-quiet">Use my location</button>
+          </div>
+        </form>
+        <p id="search-status" class="status" role="status"></p>
+        <ul id="results" class="results" aria-label="Matching places" hidden></ul>
+      </section>
+
+      <section id="now" class="sky" aria-labelledby="now-title" data-level="0">
+        <div id="now-body" class="sky-inner wrap">
+          <h2 id="now-title">See the air where you are</h2>
+        </div>
+      </section>
+
+      <div class="columns wrap">
+        <div class="column-main">
+          <section id="advice" class="block" aria-labelledby="advice-title">
+            <h2 id="advice-title">What to do</h2>
+            <div id="advice-body"></div>
+          </section>
+          <section id="forecast" class="block" aria-labelledby="forecast-title">
+            <h2 id="forecast-title">Next 48 hours</h2>
+            <div id="forecast-body"></div>
+          </section>
+        </div>
+
+        <div class="column-side">
+          <section id="assistant" class="panel" aria-labelledby="assistant-title">
+            <h2 id="assistant-title">Ask AirWise</h2>
+            <div id="chat-log" class="chat-log" role="log" aria-labelledby="assistant-title" tabindex="0"></div>
+            <div id="suggestions" class="suggestions" role="group" aria-label="Suggested questions"></div>
+            <form id="chat-form" class="chat-form" novalidate>
+              <label for="question" class="visually-hidden">Your question</label>
+              <input
+                id="question"
+                name="question"
+                type="text"
+                maxlength="300"
+                autocomplete="off"
+                placeholder="Ask about the air…"
+              />
+              <button type="submit" class="button">Ask</button>
+            </form>
+          </section>
+
+          <section id="profile" class="block" aria-labelledby="profile-title">
+            <h2 id="profile-title">About you</h2>
+            <p class="hint">Advice adapts to your answers. They are saved only in this browser.</p>
+            <form id="profile-form" class="profile-form"></form>
+          </section>
+        </div>
+      </div>
+    </main>
+
+    <footer class="footer wrap">
+      <p>
+        Data from the <a href="https://open-meteo.com/en/docs/air-quality-api" rel="noopener noreferrer">Open-Meteo air quality API</a>,
+        based on forecasts from the
+        <a href="https://atmosphere.copernicus.eu/" rel="noopener noreferrer">Copernicus Atmosphere Monitoring Service</a>.
+        Figures are model estimates for the area, not readings from a local station.
+      </p>
+      <p>AirWise gives general guidance and is not medical advice. If you have symptoms, talk to a doctor.</p>
+    </footer>
+
+    <noscript><p class="wrap">AirWise needs JavaScript to fetch live air quality data.</p></noscript>
+  </body>
+</html>
