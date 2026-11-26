@@ -337,6 +337,57 @@ describe('location', () => {
   });
 });
 
+describe('reveal animation', () => {
+  it('plays when a new reading arrives, not when only the profile changes', async () => {
+    const { app } = setup();
+    await app.selectPlace(DELHI);
+    expect($('#now').classList.contains('is-revealing')).toBe(true);
+    expect($('#forecast-body').classList.contains('is-revealing')).toBe(true);
+
+    const heart = $('input[value="heart"]', HTMLInputElement);
+    heart.checked = true;
+    heart.dispatchEvent(new Event('change', { bubbles: true }));
+    expect($('#now').classList.contains('is-revealing')).toBe(false);
+    expect($('#forecast-body').classList.contains('is-revealing')).toBe(false);
+
+    updateRadio('in');
+    expect($('#now').classList.contains('is-revealing')).toBe(true);
+  });
+
+  it('shows a loading state while data is on its way', async () => {
+    const pending = deferred<AirQualityData>();
+    const { app } = setup({ client: fakeClient({ getAirQuality: () => pending.promise }) });
+    const loading = app.selectPlace(DELHI);
+    expect($('#now').getAttribute('aria-busy')).toBe('true');
+    pending.resolve(POLLUTED);
+    await loading;
+    expect($('#now').getAttribute('aria-busy')).toBe('false');
+  });
+
+  it('counts the number from the previous reading when the scale changes', async () => {
+    const frames: FrameRequestCallback[] = [];
+    const win = window as unknown as Record<string, unknown>;
+    const original = { matchMedia: win.matchMedia, raf: win.requestAnimationFrame };
+    win.matchMedia = () => ({ matches: false });
+    win.requestAnimationFrame = (callback: FrameRequestCallback) => frames.push(callback);
+    try {
+      const { app } = setup();
+      await app.selectPlace(DELHI);
+      expect($('.reading-value').textContent).toBe('0');
+      for (const frame of frames.splice(0)) frame(0);
+      for (const frame of frames.splice(0)) frame(5000);
+      expect($('.reading-value').textContent).toBe('182');
+
+      updateRadio('in');
+      expect($('.reading-value').textContent).toBe('182');
+      expect($('.reading .visually-hidden').textContent).toBe('233');
+    } finally {
+      win.matchMedia = original.matchMedia;
+      win.requestAnimationFrame = original.raf;
+    }
+  });
+});
+
 describe('refreshIfStale', () => {
   it('refetches only after 30 minutes', async () => {
     const getAirQuality = vi.fn(() => Promise.resolve(POLLUTED));

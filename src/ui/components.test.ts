@@ -55,6 +55,22 @@ describe('renderSky', () => {
     expect(root.querySelector('.is-dominant dt')?.textContent).toMatch(/PM2\.5 main pollutant/);
   });
 
+  it('places the reading on a scale bar sized by category', () => {
+    const root = mount(sky({}).nodes);
+    const meter = root.querySelector('.meter');
+    expect(meter?.getAttribute('role')).toBe('img');
+    expect(meter?.getAttribute('aria-label')).toBe('182 on a scale of 0 to 500: Unhealthy');
+    const bands = [...root.querySelectorAll<HTMLElement>('.meter-band')].map((b) => b.style.getPropertyValue('--span'));
+    expect(bands).toEqual(['51', '50', '50', '50', '100', '200']);
+    expect(root.querySelector<HTMLElement>('.meter-marker')?.style.getPropertyValue('--position')).toBe('36.40%');
+  });
+
+  it('keeps a stable copy of the number for screen readers', () => {
+    const root = mount(sky({}).nodes);
+    expect(root.querySelector('.reading-value')?.getAttribute('aria-hidden')).toBe('true');
+    expect(root.querySelector('.reading .visually-hidden')?.textContent).toBe('182');
+  });
+
   it('omits the region line when the label is just the name', () => {
     const root = mount(sky({ place: { id: 0, name: 'Your location', latitude: 1, longitude: 1 } }).nodes);
     expect(root.querySelector('.sky-region')).toBeNull();
@@ -92,7 +108,9 @@ describe('renderForecast', () => {
 describe('forecastChart', () => {
   it('draws one bar per known hour and highlights the best window', () => {
     const chart = forecastChart(VIEW.forecast, VIEW.standard, null, 'summary', VIEW.today);
-    expect(chart.querySelectorAll('.chart-bar')).toHaveLength(48);
+    const bars = chart.querySelectorAll<SVGRectElement>('.chart-bar');
+    expect(bars).toHaveLength(48);
+    expect(bars[5]?.style.getPropertyValue('--i')).toBe('5');
     expect(chart.querySelector('.chart-best')).toBeNull();
 
     const best = { start: VIEW.forecast[2]?.time ?? '', end: '2099-01-01T00:00', peak: 1, average: 1, level: 1 as const };

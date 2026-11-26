@@ -92,16 +92,17 @@ export function forecastChart(
   hours.forEach((hour, index) => {
     if (hour.value !== null && hour.level !== null) {
       const top = y(hour.value);
-      root.append(
-        svg('rect', {
-          class: `chart-bar level-${hour.level}`,
-          x: x(index),
-          y: top,
-          width: BAR,
-          height: Math.max(1, TOP + PLOT_HEIGHT - top),
-          rx: 2,
-        }),
-      );
+      const bar = svg('rect', {
+        class: `chart-bar level-${hour.level}`,
+        x: x(index),
+        y: top,
+        width: BAR,
+        height: Math.max(1, TOP + PLOT_HEIGHT - top),
+        rx: 2,
+      });
+      // Bar order drives the left-to-right reveal (see styles.css).
+      bar.style.setProperty('--i', String(index));
+      root.append(bar);
     }
 
     const hourOfDay = localHour(hour.time);

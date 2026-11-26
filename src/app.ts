@@ -19,6 +19,7 @@ import { renderForecast } from './ui/components/forecastPanel';
 import { placeResults, profileFields } from './ui/components/forms';
 import { renderSky, SKY_HEADING_ID, type LoadStatus } from './ui/components/sky';
 import { byId } from './ui/dom';
+import { animateNumber } from './ui/motion';
 
 export interface AppState {
   readonly prefs: Preferences;
@@ -89,6 +90,11 @@ export function startApp(doc: Document, deps: AppDependencies): App {
   let loadToken = 0;
   let locating = false;
 
+  // Animation bookkeeping: reveal only when the reading itself changes.
+  let revealedKey: string | null = null;
+  let lastShown: { placeId: number; value: number } | null = null;
+  let stopCounting: () => void = () => undefined;
+
   // The view only changes with the data, the scale or the hour, so it is memoised.
   let memo: { data: AirQualityData; standard: string; hour: number; view: AirView } | null = null;
   function viewFor(state: AppState): AirView | null {
@@ -118,6 +124,7 @@ export function startApp(doc: Document, deps: AppDependencies): App {
 
   function render(state: AppState): void {
     const view = viewFor(state);
+    const current = view?.current ?? null;
     const sky = renderSky({
       status: state.status,
       place: state.place,
@@ -125,11 +132,29 @@ export function startApp(doc: Document, deps: AppDependencies): App {
       profile: state.prefs.profile,
       error: state.error,
     });
+
+    // A new place, scale or data set plays the reveal; other re-renders (such as
+    // a profile change) swap content in place without motion.
+    const key = current && state.place ? `${state.place.id}|${state.prefs.standard}|${state.fetchedAt ?? 0}` : null;
+    const reveal = key !== null && key !== revealedKey;
+    if (key !== null) revealedKey = key;
+    ui.sky.classList.toggle('is-revealing', reveal);
+    ui.forecastBody.classList.toggle('is-revealing', reveal);
+
+    stopCounting();
     ui.sky.dataset.level = String(sky.level);
     ui.sky.setAttribute('aria-busy', String(state.status === 'loading'));
     ui.skyBody.replaceChildren(...sky.nodes);
     ui.forecastBody.replaceChildren(...renderForecast(view));
     ui.adviceBody.replaceChildren(...renderAdvice(view, state.prefs.profile));
+
+    const valueNode = ui.skyBody.querySelector<HTMLElement>('.reading-value');
+    if (valueNode && current && state.place) {
+      // Count from the previous reading for the same place (e.g. a scale switch), otherwise from zero.
+      const from = !reveal ? current.value : lastShown?.placeId === state.place.id ? lastShown.value : 0;
+      stopCounting = animateNumber(valueNode, from, current.value, doc.defaultView ?? {});
+      lastShown = { placeId: state.place.id, value: current.value };
+    }
   }
 
   function updatePrefs(patch: Partial<Preferences>): void {

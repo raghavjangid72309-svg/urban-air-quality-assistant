@@ -1,5 +1,7 @@
 import { placeLabel, type Place } from '../../api/openMeteo';
 import { getAdvice } from '../../domain/advice';
+import type { AqiResult } from '../../domain/aqi/calculate';
+import type { AqiStandard } from '../../domain/aqi/standards';
 import { formatConcentration } from '../../domain/format';
 import { POLLUTANTS } from '../../domain/pollutants';
 import type { HealthProfile } from '../../domain/profile';
@@ -24,6 +26,27 @@ export interface SkyContent {
 }
 
 export const SKY_HEADING_ID = 'now-title';
+
+/**
+ * Where the reading sits on the whole 0–500 scale: one band per category, sized
+ * by its range, with a marker at the current value.
+ */
+export function scaleMeter(standard: AqiStandard, current: AqiResult): HTMLElement {
+  const top = standard.categories.at(-1)?.max ?? 500;
+  const bands = standard.categories.map((category) => {
+    const band = el('span', { class: `meter-band level-${category.level}` });
+    band.style.setProperty('--span', String(category.max - category.min + 1));
+    return band;
+  });
+  const marker = el('span', { class: 'meter-marker' });
+  marker.style.setProperty('--position', `${Math.min(100, (current.value / top) * 100).toFixed(2)}%`);
+
+  return el(
+    'div',
+    { class: 'meter', role: 'img', 'aria-label': `${current.value} on a scale of 0 to ${top}: ${current.category.label}` },
+    [el('div', { class: 'meter-track' }, bands), marker],
+  );
+}
 
 const heading = (text: string) => el('h2', { id: SKY_HEADING_ID, class: 'sky-place', tabindex: -1 }, [text]);
 
@@ -71,10 +94,13 @@ export function renderSky({ status, place, view, profile, error }: SkyProps): Sk
   const reading = el('div', { class: 'sky-reading' }, [
     header,
     el('p', { class: 'reading' }, [
-      el('span', { class: 'reading-value' }, [current.value]),
+      // The visible number may count up; assistive technology reads the stable copy.
+      el('span', { class: 'reading-value', 'aria-hidden': 'true' }, [current.value]),
+      el('span', { class: 'visually-hidden' }, [current.value]),
       ' ',
       el('span', { class: 'reading-scale' }, [view.standard.shortName]),
     ]),
+    scaleMeter(view.standard, current),
     el('p', { class: 'reading-category' }, [current.category.label]),
     el('p', { class: 'reading-verdict' }, [advice.headline]),
     el('p', { class: 'sky-meta' }, [
