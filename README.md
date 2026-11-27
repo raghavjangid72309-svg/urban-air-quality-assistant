@@ -1,9 +1,11 @@
 # AirWise: urban air quality assistant
 
+**Live site: https://urban-air-quality-assistant-sigma.vercel.app**
+
 AirWise tells city residents what the air is like where they are, what that means for them, and when it will be
 better. It also answers plain-language questions such as *"Can my kid with asthma play outside tomorrow?"*.
 
-It runs entirely in the browser on free, keyless public data, has no runtime dependencies, and ships 17 KB of
+It runs entirely in the browser on free, keyless public data, has no runtime dependencies, and ships 19 KB of
 gzipped JavaScript.
 
 ## What it does
@@ -36,9 +38,13 @@ Other scripts: `npm test`, `npm run coverage`, `npm run build`, `npm run preview
 
 ## Deploy
 
-`npm run build` produces a static site in `dist/` that any static host can serve. `vercel.json` configures
-Vercel (import the repository and accept the defaults) and adds the security headers listed below. On other hosts
-the same Content Security Policy is already in the HTML as a `<meta>` tag.
+The live site is hosted on Vercel, linked to this repository: every push to `main` deploys to production and
+pull requests get preview deployments. `vercel.json` sets the build and output directory and adds the security
+headers listed below (CSP, HSTS, `nosniff`, `frame-ancestors 'none'` and more).
+
+`npm run build` produces a static site in `dist/` that any static host can serve. The build uses relative paths,
+and the Content Security Policy is also in the HTML as a `<meta>` tag, so it still applies on hosts that cannot
+set headers.
 
 ## How it works
 
