@@ -10,7 +10,7 @@ gzipped JavaScript.
 
 | A resident wants to know… | AirWise gives them… |
 | --- | --- |
-| How bad is the air right now? | The current AQI, its category and the main pollutant, on the **US EPA** or **India CPCB** scale. The page's "sky" band takes on the colour of the reading, and a scale bar shows where it sits from 0 to 500. |
+| How bad is the air right now? | The current AQI, its category and the main pollutant, on the **US EPA** or **India CPCB** scale. A circular gauge sweeps round to the reading, and the whole page (background glow, card, accents) takes on the category's colour. Each pollutant gets its own card with a level bar. |
 | What should I do about it? | Advice tailored to their health (asthma, heart conditions, children, older adults, pregnancy, outdoor work) and plans (exercise, commuting, errands): outdoor activity, masks, windows and concrete actions. |
 | When is it better? | A 48-hour hourly forecast with the cleanest two-hour daytime window highlighted, a trend, and the same figures as a table. |
 | My own question | An assistant that understands questions about activities, times ("tonight", "tomorrow"), pollutants, masks, windows, causes and health groups, and answers from the live data. |
@@ -20,7 +20,7 @@ Other details:
 - City search worldwide, or "Use my location".
 - The AQI scale defaults to India CPCB for Indian locales and time zones, and US EPA elsewhere.
 - Preferences and the last place are remembered on the device only.
-- Light and dark themes, responsive down to 320 px.
+- A dark, animated dashboard design, responsive down to 320 px.
 
 ## Run it
 
@@ -105,12 +105,15 @@ Built to WCAG 2.2 AA:
   through `role="log"`. After a place loads, focus moves to its heading.
 - Colour is never the only signal: every AQI value comes with its category in words. The forecast chart is a
   labelled image with a text summary, plus a full data table.
-- Motion is purposeful and optional. A new reading plays one short reveal: the sky changes colour, the number
-  counts up, the scale marker slides into place and the forecast bars grow. Changing your profile does not replay
-  it. Screen readers get a stable copy of the number rather than the count, and everything is skipped when the
-  system asks for reduced motion.
-- Visible focus rings, support for `prefers-reduced-motion`, `prefers-color-scheme` and Windows forced-colours
-  mode, and no horizontal scrolling at 320 px except inside the labelled, keyboard-focusable chart region.
+- Motion is purposeful and optional. A new reading plays one choreographed reveal: the page colour shifts, the gauge
+  sweeps round as the number counts up, pollutant bars fill and the forecast line draws itself. Changing your
+  profile does not replay it. Sections fade in once as you scroll to them, and the assistant shows a brief typing
+  indicator. Screen readers get a stable copy of the number rather than the count.
+- The looping background glow and live indicator can be stopped with the **Pause animation** button (WCAG 2.2.2),
+  and the choice is remembered. When the system asks for reduced motion, every animation is skipped and the typing
+  delay is removed.
+- Visible focus rings, support for `prefers-reduced-motion` and Windows forced-colours mode, and no horizontal
+  scrolling at 320 px except inside the labelled, keyboard-focusable chart region.
 - Automated checks: axe-core runs in the tests against each component and the whole page, both empty and with data
   loaded.
 
@@ -128,8 +131,8 @@ The details are in [SECURITY.md](SECURITY.md). In brief:
 
 ## Efficiency
 
-- No framework and no runtime dependencies: 45 KB of JavaScript (17 KB gzipped) and 15 KB of CSS (4.2 KB gzipped).
-- Animation is CSS keyframes plus one `requestAnimationFrame` count-up, with no animation library.
+- No framework and no runtime dependencies: 51 KB of JavaScript (19 KB gzipped) and 23 KB of CSS (5.8 KB gzipped).
+- Animation is CSS keyframes (mostly `transform`, `opacity` and SVG stroke offsets) plus one `requestAnimationFrame` count-up, with no animation library. One registered CSS colour property, `--tone`, carries the AQI colour to every element, so a new reading recolours the page without re-rendering it. Scroll reveals use `IntersectionObserver` rather than scroll listeners.
 - One request per place: hourly data for every pollutant comes in a single call, and switching between the US and
   India scales recalculates locally without refetching.
 - Responses are cached (15 minutes for air quality, 24 hours for place search), and concurrent identical requests
@@ -141,7 +144,7 @@ The details are in [SECURITY.md](SECURITY.md). In brief:
 
 ## Testing
 
-300 tests in 19 files ([Vitest](https://vitest.dev) with jsdom), at 98.6% statement and 93.7% branch coverage.
+319 tests in 20 files ([Vitest](https://vitest.dev) with jsdom), at 98.5% statement and 93.7% branch coverage.
 CI enforces minimums of 90% and 85%.
 
 | Area | What is covered |
@@ -150,7 +153,7 @@ CI enforces minimums of 90% and 85%.
 | Forecast and advice | Best-window search (hours allowed, gaps, ties), daily summaries, trend detection, risk for each level and group, mask and window guidance |
 | Assistant | 26 phrasings mapped to intents, entity extraction, and the exact wording of answers for clean, unhealthy and hazardous air, future times and missing data |
 | API | Timeouts, cancellation, HTTP, parse and network errors, response validation, input sanitising, caching, request merging, TTL |
-| UI and app | Every render state, when the reveal animation plays and when it doesn't, count-up timing and reduced motion, the full search → select → ask flow, scale and profile changes, retry, geolocation outcomes, stale-response handling, XSS payloads rendered as text, persistence |
+| UI and app | Every render state, the gauge geometry and labels, the forecast line (gaps, tooltips, band colours), when the reveal plays and when it doesn't, count-up timing, scroll reveal, the typing indicator, reduced motion, the full search → select → ask flow, scale and profile changes, retry, geolocation outcomes, stale-response handling, XSS payloads rendered as text, persistence |
 | Accessibility | axe-core (WCAG 2.2 AA and best practice) on components and the whole page |
 | Security config | CSP identical in the build and the headers, only the APIs actually called allowed, no inline scripts or handlers in the HTML |
 
@@ -165,7 +168,7 @@ src/api/               HTTP, cache, Open-Meteo client and validation
 src/assistant/         Intent parser and grounded responder
 src/domain/            AQI engine, advice, forecast, units, time (pure functions)
 src/state/             Store, preferences, derived air view
-src/ui/                DOM helper, chart and components
+src/ui/                DOM helper, gauge, line chart, icons, motion and components
 src/styles.css         Design tokens and layout
 vercel.json            Security and caching headers
 ```

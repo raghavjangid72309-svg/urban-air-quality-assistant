@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import html from '../index.html?raw';
 import { ApiError } from './api/http';
 import type { AirQualityData, OpenMeteoClient, Place } from './api/openMeteo';
-import { MY_LOCATION_ID, startApp, type AppDependencies } from './app';
+import { MY_LOCATION_ID, startApp, TYPING_DELAY_MS, type AppDependencies } from './app';
 import { STORAGE_KEY } from './state/preferences';
 import { axeViolations } from './test-utils/a11y';
 import { DELHI, fakeClient, flush, makeAirData, memoryStorage, NOW_MS } from './test-utils/fixtures';
@@ -140,6 +140,8 @@ describe('choosing a place', () => {
     await flush();
 
     expect($('#now').dataset.level).toBe('4');
+    expect(document.documentElement.dataset.level).toBe('4');
+    expect(document.querySelectorAll('#pollutants-body .pollutant')).toHaveLength(6);
     expect($('.reading-value').textContent).toBe('182');
     expect($('.reading-category').textContent).toBe('Unhealthy');
     expect($('#search-status').textContent).toBe('Showing Delhi: 182 on the US scale, unhealthy.');
@@ -343,6 +345,7 @@ describe('reveal animation', () => {
     await app.selectPlace(DELHI);
     expect($('#now').classList.contains('is-revealing')).toBe(true);
     expect($('#forecast-body').classList.contains('is-revealing')).toBe(true);
+    expect($('#pollutants-body').classList.contains('is-revealing')).toBe(true);
 
     const heart = $('input[value="heart"]', HTMLInputElement);
     heart.checked = true;
@@ -385,6 +388,66 @@ describe('reveal animation', () => {
       win.matchMedia = original.matchMedia;
       win.requestAnimationFrame = original.raf;
     }
+  });
+});
+
+describe('pause control', () => {
+  it('pauses looping animation and remembers the choice', () => {
+    const { deps } = setup();
+    const toggle = $('#motion-toggle', HTMLButtonElement);
+    expect(toggle.textContent).toBe('Pause animation');
+
+    toggle.click();
+    expect(document.documentElement.classList.contains('motion-paused')).toBe(true);
+    expect(toggle.textContent).toBe('Play animation');
+    expect(savedPrefs(deps.storage)).toMatchObject({ motionPaused: true });
+
+    toggle.click();
+    expect(document.documentElement.classList.contains('motion-paused')).toBe(false);
+    expect(toggle.textContent).toBe('Pause animation');
+  });
+
+  it('starts paused when the user paused it last time', () => {
+    setup({ storage: memoryStorage({ [STORAGE_KEY]: JSON.stringify({ motionPaused: true }) }) });
+    expect(document.documentElement.classList.contains('motion-paused')).toBe(true);
+    expect($('#motion-toggle').textContent).toBe('Play animation');
+  });
+});
+
+describe('typing indicator', () => {
+  function withMotion(run: () => void) {
+    const win = window as unknown as Record<string, unknown>;
+    const original = win.matchMedia;
+    win.matchMedia = () => ({ matches: false });
+    vi.useFakeTimers();
+    try {
+      run();
+    } finally {
+      vi.useRealTimers();
+      win.matchMedia = original;
+    }
+  }
+
+  it('shows typing dots before the answer when motion is allowed', () => {
+    withMotion(() => {
+      const { app } = setup();
+      app.askQuestion('hello');
+      expect(document.querySelector('#chat-log .message-typing')).not.toBeNull();
+      expect($('#chat-log').lastElementChild?.textContent).toBe('');
+
+      vi.advanceTimersByTime(TYPING_DELAY_MS);
+      expect(document.querySelector('#chat-log .message-typing')).toBeNull();
+      expect($('#chat-log').lastElementChild?.textContent).toMatch(/^AirWise:Hello!/);
+    });
+  });
+
+  it('answers straight away when animation is paused', () => {
+    withMotion(() => {
+      const { app } = setup({ storage: memoryStorage({ [STORAGE_KEY]: JSON.stringify({ motionPaused: true }) }) });
+      app.askQuestion('hello');
+      expect(document.querySelector('#chat-log .message-typing')).toBeNull();
+      expect($('#chat-log').lastElementChild?.textContent).toMatch(/^AirWise:Hello!/);
+    });
   });
 });
 

@@ -33,11 +33,17 @@ describe('parsePreferences', () => {
       standard: 'in',
       profile: { groups: ['heart', 'child'], activity: 'exercise' },
       lastPlace: DELHI,
+      motionPaused: false,
     });
   });
 
   it('replaces invalid fields with the fallback', () => {
-    const stored = { standard: 'xx', profile: { groups: 'child', activity: 'skydiving' }, lastPlace: { id: 'x' } };
+    const stored = {
+      standard: 'xx',
+      profile: { groups: 'child', activity: 'skydiving' },
+      lastPlace: { id: 'x' },
+      motionPaused: 'yes',
+    };
     expect(parsePreferences(stored, fallback)).toEqual(fallback);
   });
 
@@ -55,7 +61,12 @@ describe('parsePreferences', () => {
 describe('loadPreferences and savePreferences', () => {
   it('round-trips through storage', () => {
     const storage = memoryStorage();
-    const prefs: Preferences = { standard: 'in', profile: { groups: ['older'], activity: 'commute' }, lastPlace: DELHI };
+    const prefs: Preferences = {
+      standard: 'in',
+      profile: { groups: ['older'], activity: 'commute' },
+      lastPlace: DELHI,
+      motionPaused: true,
+    };
     expect(savePreferences(storage, prefs)).toBe(true);
     expect(loadPreferences(storage, fallback)).toEqual(prefs);
   });

@@ -1,19 +1,29 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { AQI_STANDARDS } from '../domain/aqi/standards';
 import { DEFAULT_PROFILE } from '../domain/profile';
 import { buildAirView } from '../state/airView';
 import { axeViolations } from '../test-utils/a11y';
-import { DELHI, makeAirData, NOW_MS } from '../test-utils/fixtures';
-import { forecastChart } from './chart';
+import { DELHI, hoursFrom, makeAirData, NOW_MS } from '../test-utils/fixtures';
+import { forecastChart, smoothPath } from './chart';
 import { renderAdvice } from './components/advicePanel';
-import { chatMessage, suggestionButtons } from './components/chat';
+import { chatMessage, suggestionButtons, typingIndicator } from './components/chat';
 import { renderForecast } from './components/forecastPanel';
 import { placeResults, profileFields } from './components/forms';
-import { renderSky, type SkyProps } from './components/sky';
+import { arcPath, renderHero, type HeroProps } from './components/hero';
+import { renderPollutants } from './components/pollutantsPanel';
 import { el } from './dom';
 
-const VIEW = buildAirView(makeAirData({ pm2_5: 100 }), 'us', NOW_MS);
-const sky = (props: Partial<SkyProps>) =>
-  renderSky({ status: 'ready', place: DELHI, view: VIEW, profile: DEFAULT_PROFILE, error: null, ...props });
+const VIEW = buildAirView(makeAirData({ pm2_5: 100 }), 'us', NOW_MS); // US AQI 182, unhealthy
+const hero = (props: Partial<HeroProps>) =>
+  renderHero({
+    status: 'ready',
+    standard: AQI_STANDARDS.us,
+    place: DELHI,
+    view: VIEW,
+    profile: DEFAULT_PROFILE,
+    error: null,
+    ...props,
+  });
 const mount = (nodes: Node[]) => {
   const root = el('main');
   root.append(...nodes);
@@ -25,59 +35,108 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-describe('renderSky', () => {
-  it('invites a search before a place is chosen', () => {
-    const content = sky({ place: null, view: null, status: 'idle' });
+describe('renderHero', () => {
+  it('invites a search before a place is chosen, with an empty decorative gauge', () => {
+    const content = hero({ place: null, view: null, status: 'idle' });
     expect(content.level).toBe(0);
-    expect(mount(content.nodes).textContent).toMatch(/See the air where you are/);
+    const root = mount(content.nodes);
+    expect(root.querySelector('h2')?.textContent).toBe('See the air where you are');
+    expect(root.querySelector('.gauge')?.getAttribute('aria-hidden')).toBe('true');
+    expect(root.querySelectorAll('.gauge-band')).toHaveLength(6);
+    expect(root.querySelector('.gauge-progress')).toBeNull();
   });
 
-  it('shows loading and error states with a retry button', () => {
-    expect(mount(sky({ status: 'loading', view: null }).nodes).textContent).toMatch(/Loading air quality/);
-    const root = mount(sky({ status: 'error', view: null, error: 'Offline.' }).nodes);
+  it('shows a skeleton while loading', () => {
+    const root = mount(hero({ status: 'loading', view: null }).nodes);
+    expect(root.textContent).toMatch(/Loading air quality/);
+    expect(root.querySelector('.skeleton-lines')?.getAttribute('aria-hidden')).toBe('true');
+    expect(root.querySelector('.hero-gauge.is-loading')).not.toBeNull();
+  });
+
+  it('shows errors with a retry button', () => {
+    const root = mount(hero({ status: 'error', view: null, error: 'Offline.' }).nodes);
     expect(root.textContent).toMatch(/Offline\./);
     expect(root.querySelector('[data-action="retry"]')).not.toBeNull();
-    expect(mount(sky({ status: 'error', view: null }).nodes).textContent).toMatch(/could not be loaded/);
+    expect(mount(hero({ status: 'error', view: null }).nodes).textContent).toMatch(/could not be loaded/);
   });
 
   it('explains when no index can be calculated', () => {
-    expect(mount(sky({ view: { ...VIEW, current: null } }).nodes).textContent).toMatch(/not enough recent data/);
+    expect(mount(hero({ view: { ...VIEW, current: null } }).nodes).textContent).toMatch(/not enough recent data/);
   });
 
-  it('shows the reading, its category, advice and pollutants', () => {
-    const content = sky({});
+  it('shows the reading on the gauge with its category and quick advice', () => {
+    const content = hero({});
     expect(content.level).toBe(4);
     const root = mount(content.nodes);
-    expect(root.querySelector('.reading-value')?.textContent).toBe('182');
+    expect(root.querySelector('.live')?.textContent).toBe('Latest hourly estimate');
+    expect(root.querySelector('.hero-region')?.textContent).toBe('National Capital Territory of Delhi, India');
     expect(root.querySelector('.reading-category')?.textContent).toBe('Unhealthy');
-    expect(root.querySelector('.sky-region')?.textContent).toBe('National Capital Territory of Delhi, India');
-    expect(root.querySelectorAll('.pollutant')).toHaveLength(6);
-    expect(root.querySelector('.is-dominant dt')?.textContent).toMatch(/PM2\.5 main pollutant/);
+    expect(root.querySelector('.reading-verdict')?.textContent).toBe('Cut back on long or intense outdoor activity today.');
+    expect(root.querySelector('.gauge-caption')?.textContent).toBe('Main pollutant PM2.5');
+    expect([...root.querySelectorAll('.fact-value')].map((n) => n.textContent)).toEqual([
+      'Keep it short and light',
+      'Worth it for long periods',
+      'Air out at the cleanest time',
+    ]);
   });
 
-  it('places the reading on a scale bar sized by category', () => {
-    const root = mount(sky({}).nodes);
-    const meter = root.querySelector('.meter');
-    expect(meter?.getAttribute('role')).toBe('img');
-    expect(meter?.getAttribute('aria-label')).toBe('182 on a scale of 0 to 500: Unhealthy');
-    const bands = [...root.querySelectorAll<HTMLElement>('.meter-band')].map((b) => b.style.getPropertyValue('--span'));
-    expect(bands).toEqual(['51', '50', '50', '50', '100', '200']);
-    expect(root.querySelector<HTMLElement>('.meter-marker')?.style.getPropertyValue('--position')).toBe('36.40%');
+  it('labels the gauge for assistive technology and sets its fill', () => {
+    const root = mount(hero({}).nodes);
+    const gauge = root.querySelector<SVGSVGElement>('.gauge');
+    expect(gauge?.getAttribute('role')).toBe('img');
+    expect(gauge?.getAttribute('aria-label')).toBe('US AQI 182 out of 500: Unhealthy');
+    expect(gauge?.style.getPropertyValue('--pct')).toBe('36.40');
+    expect(root.querySelector('.gauge-progress')?.getAttribute('pathLength')).toBe('100');
   });
 
   it('keeps a stable copy of the number for screen readers', () => {
-    const root = mount(sky({}).nodes);
+    const root = mount(hero({}).nodes);
     expect(root.querySelector('.reading-value')?.getAttribute('aria-hidden')).toBe('true');
     expect(root.querySelector('.reading .visually-hidden')?.textContent).toBe('182');
   });
 
   it('omits the region line when the label is just the name', () => {
-    const root = mount(sky({ place: { id: 0, name: 'Your location', latitude: 1, longitude: 1 } }).nodes);
-    expect(root.querySelector('.sky-region')).toBeNull();
+    const root = mount(hero({ place: { id: 0, name: 'Your location', latitude: 1, longitude: 1 } }).nodes);
+    expect(root.querySelector('.hero-region')).toBeNull();
   });
 
   it('has no accessibility violations', async () => {
-    mount(sky({}).nodes);
+    mount(hero({}).nodes);
+    expect(await axeViolations(document.body)).toEqual([]);
+  });
+});
+
+describe('arcPath', () => {
+  it('uses the large-arc flag only for sweeps over 180°', () => {
+    expect(arcPath(135, 405)).toMatch(/^M[\d.]+ [\d.]+ A84 84 0 1 1 /);
+    expect(arcPath(135, 200)).toMatch(/ A84 84 0 0 1 /);
+  });
+});
+
+describe('renderPollutants', () => {
+  it('shows an empty state without data', () => {
+    expect(mount(renderPollutants(null)).textContent).toMatch(/appear here once you choose a place/);
+  });
+
+  it('renders a card per pollutant, coloured by its own sub-index', () => {
+    const root = mount(renderPollutants(VIEW));
+    const cards = [...root.querySelectorAll<HTMLElement>('.pollutant')];
+    expect(cards).toHaveLength(6);
+
+    const [main] = cards;
+    expect(main?.className).toBe('pollutant level-4 is-dominant');
+    expect(main?.querySelector('.badge')?.textContent).toBe('Main pollutant');
+    expect(main?.querySelector('.pollutant-number')?.textContent).toBe('100');
+    expect(main?.querySelector('.pollutant-unit')?.textContent).toBe('µg/m³');
+    expect(main?.querySelector<HTMLElement>('.meter-fill')?.style.getPropertyValue('--pct')).toBe('36.40');
+    expect(main?.querySelector('.pollutant-index')?.textContent).toBe('Index 182, 24-hour average');
+
+    expect(cards.slice(1).every((card) => card.querySelector('.badge') === null)).toBe(true);
+    expect(cards.at(-1)?.className).toBe('pollutant level-1');
+  });
+
+  it('has no accessibility violations', async () => {
+    mount(renderPollutants(VIEW));
     expect(await axeViolations(document.body)).toEqual([]);
   });
 });
@@ -106,22 +165,74 @@ describe('renderForecast', () => {
 });
 
 describe('forecastChart', () => {
-  it('draws one bar per known hour and highlights the best window', () => {
-    const chart = forecastChart(VIEW.forecast, VIEW.standard, null, 'summary', VIEW.today);
-    const bars = chart.querySelectorAll<SVGRectElement>('.chart-bar');
-    expect(bars).toHaveLength(48);
-    expect(bars[5]?.style.getPropertyValue('--i')).toBe('5');
-    expect(chart.querySelector('.chart-best')).toBeNull();
+  const chart = (hours = VIEW.forecast, best: Parameters<typeof forecastChart>[2] = null) =>
+    forecastChart(hours, VIEW.standard, best, 'summary', VIEW.today);
 
+  it('draws one smooth line with a band-coloured gradient and an area beneath', () => {
+    const svg = chart();
+    expect(svg.querySelectorAll('.chart-line')).toHaveLength(1);
+    expect(svg.querySelector('.chart-line')?.getAttribute('d')).toMatch(/^M[\d.]+ [\d.]+ C/);
+    expect(svg.querySelectorAll('.chart-area')).toHaveLength(1);
+    // Axis tops out at 200, so four bands (two stops each) colour the line.
+    expect(svg.querySelectorAll('.chart-stop')).toHaveLength(8);
+    expect([...svg.querySelectorAll('.chart-axis[text-anchor="end"]')].map((n) => n.textContent)).toEqual([
+      '50',
+      '100',
+      '150',
+      '200',
+    ]);
+  });
+
+  it('gives every hour a tooltip and marks the current hour', () => {
+    const svg = chart();
+    const hits = svg.querySelectorAll('.chart-hit');
+    expect(hits).toHaveLength(48);
+    expect(hits[0]?.querySelector('title')?.textContent).toBe('20:00 today: US AQI 182, Unhealthy');
+    expect(svg.querySelector('.chart-now')).not.toBeNull();
+  });
+
+  it('highlights the best window only when there is one', () => {
+    expect(chart().querySelector('.chart-best')).toBeNull();
     const best = { start: VIEW.forecast[2]?.time ?? '', end: '2099-01-01T00:00', peak: 1, average: 1, level: 1 as const };
-    const highlighted = forecastChart(VIEW.forecast, VIEW.standard, best, 'summary', VIEW.today);
-    expect(highlighted.querySelector('.chart-best')).not.toBeNull();
+    expect(chart(VIEW.forecast, best).querySelector('.chart-best')).not.toBeNull();
+  });
+
+  it('breaks the line at gaps and dots isolated hours', () => {
+    const hours = hoursFrom(VIEW.now, [80, 90, null, 120, 130, null, 60]);
+    const svg = chart(hours);
+    expect(svg.querySelectorAll('.chart-line')).toHaveLength(2);
+    expect(svg.querySelectorAll('.chart-point')).toHaveLength(1);
+    expect(svg.querySelectorAll('.chart-hit title')[2]?.textContent).toMatch(/no data$/);
+  });
+
+  it('skips the now marker when the current hour has no data', () => {
+    expect(chart(hoursFrom(VIEW.now, [null, 50, 60])).querySelector('.chart-now')).toBeNull();
   });
 
   it('labels days without crowding the first one', () => {
-    const chart = forecastChart(VIEW.forecast, VIEW.standard, null, 'summary', VIEW.today);
-    const days = [...chart.querySelectorAll('.chart-day')].map((n) => n.textContent);
+    const days = [...chart().querySelectorAll('.chart-day')].map((n) => n.textContent);
     expect(days).toEqual(['Tomorrow', 'Saturday']);
+  });
+});
+
+describe('smoothPath', () => {
+  it('handles empty and single-point input', () => {
+    expect(smoothPath([], 0, 100)).toBe('');
+    expect(smoothPath([[1, 2]], 0, 100)).toBe('M1 2');
+  });
+
+  it('keeps control points inside the plot', () => {
+    const path = smoothPath(
+      [
+        [0, 90],
+        [10, 0],
+        [20, 90],
+      ],
+      0,
+      100,
+    );
+    const ys = [...path.matchAll(/C([\d.-]+) ([\d.-]+) ([\d.-]+) ([\d.-]+)/g)].flatMap((m) => [Number(m[2]), Number(m[4])]);
+    expect(ys.every((value) => value >= 0 && value <= 100)).toBe(true);
   });
 });
 
@@ -130,11 +241,12 @@ describe('renderAdvice', () => {
     expect(mount(renderAdvice(null, DEFAULT_PROFILE)).textContent).toMatch(/appears here/);
   });
 
-  it('shows risk, quick facts and actions', () => {
+  it('shows the risk and actions with icons', () => {
     const root = mount(renderAdvice(VIEW, DEFAULT_PROFILE));
     expect(root.querySelector('.risk')?.textContent).toBe('High risk for most people.');
-    expect(root.querySelectorAll('.quick-facts dd')).toHaveLength(3);
-    expect(root.querySelectorAll('.actions li').length).toBeGreaterThan(0);
+    const items = root.querySelectorAll('.actions li');
+    expect(items.length).toBeGreaterThan(0);
+    expect(items[0]?.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
   });
 
   it('speaks to the person when they have shared sensitivities', () => {
@@ -150,6 +262,12 @@ describe('chat and forms', () => {
     expect(user.textContent).toBe('You asked:Hi');
     const reply = chatMessage('assistant', { text: 'Hello', points: ['One', 'Two'] });
     expect(reply.querySelectorAll('li')).toHaveLength(2);
+  });
+
+  it('renders a purely visual typing indicator', () => {
+    const typing = typingIndicator();
+    expect(typing.getAttribute('aria-hidden')).toBe('true');
+    expect(typing.querySelectorAll('.typing-dot')).toHaveLength(3);
   });
 
   it('renders suggestion buttons carrying their question', () => {

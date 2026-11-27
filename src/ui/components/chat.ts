@@ -15,6 +15,15 @@ export function chatMessage(speaker: Speaker, message: string | AssistantReply):
   ]);
 }
 
+/** Three bouncing dots shown briefly before an answer. Purely visual. */
+export function typingIndicator(): HTMLElement {
+  return el('div', { class: 'message message-assistant message-typing', 'aria-hidden': 'true' }, [
+    el('span', { class: 'typing-dot' }),
+    el('span', { class: 'typing-dot' }),
+    el('span', { class: 'typing-dot' }),
+  ]);
+}
+
 export function suggestionButtons(questions: readonly string[]): HTMLButtonElement[] {
   return questions.map((question) => el('button', { type: 'button', class: 'chip', 'data-question': question }, [question]));
 }

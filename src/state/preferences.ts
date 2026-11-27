@@ -6,6 +6,8 @@ export interface Preferences {
   readonly standard: AqiStandardId;
   readonly profile: HealthProfile;
   readonly lastPlace: Place | null;
+  /** The user stopped the looping sky animation. */
+  readonly motionPaused: boolean;
 }
 
 export const STORAGE_KEY = 'airwise:preferences:v1';
@@ -18,7 +20,7 @@ export function defaultStandard(locale?: string, timeZone?: string): AqiStandard
 }
 
 export function defaultPreferences(standard: AqiStandardId): Preferences {
-  return { standard, profile: DEFAULT_PROFILE, lastPlace: null };
+  return { standard, profile: DEFAULT_PROFILE, lastPlace: null, motionPaused: false };
 }
 
 /** Rebuilds preferences from untrusted stored JSON, keeping only valid fields. */
@@ -41,7 +43,8 @@ export function parsePreferences(raw: unknown, fallback: Preferences): Preferenc
   }
 
   const lastPlace = parsePlace(record.lastPlace) ?? fallback.lastPlace;
-  return { standard, profile, lastPlace };
+  const motionPaused = typeof record.motionPaused === 'boolean' ? record.motionPaused : fallback.motionPaused;
+  return { standard, profile, lastPlace, motionPaused };
 }
 
 /** Reads preferences; storage can be missing or throw (private mode, disabled cookies). */

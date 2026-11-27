@@ -1,12 +1,11 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-level="0">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="referrer" content="no-referrer" />
-    <meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" content="#bcddf3" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#172026" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0b1220" />
     <meta
       name="description"
       content="AirWise shows live air quality for your city, a 48-hour outlook and plain-language health advice, and answers questions like whether it is a good time for a run."
@@ -16,66 +15,83 @@
     <script type="module" src="/src/main.ts"></script>
   </head>
   <body>
+    <div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
     <a class="skip-link" href="#main">Skip to main content</a>
 
-    <header class="masthead wrap">
-      <div class="brand">
-        <h1 class="wordmark">AirWise</h1>
-        <p class="tagline">Air quality advice for your city</p>
+    <header class="topbar">
+      <div class="topbar-inner wrap">
+        <div class="brand">
+          <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+            <path d="M5 12h13a4 4 0 1 0-4-4" />
+            <path d="M5 17h19a4 4 0 1 1-4 4" />
+            <path d="M5 22h8" />
+          </svg>
+          <h1 class="brand-name">AirWise</h1>
+        </div>
+
+        <form id="search-form" class="search" role="search" novalidate>
+          <label for="city" class="visually-hidden">City or town</label>
+          <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14Z M20 20l-4.2-4.2" />
+          </svg>
+          <input
+            id="city"
+            name="city"
+            type="search"
+            inputmode="search"
+            autocomplete="address-level2"
+            maxlength="80"
+            spellcheck="false"
+            placeholder="Search a city, e.g. Pune"
+            aria-describedby="search-status"
+            required
+          />
+          <button type="submit" class="button">Search</button>
+        </form>
+
+        <div class="topbar-actions">
+          <button type="button" id="locate" class="button button-ghost">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M12 5a7 7 0 1 0 0 14a7 7 0 1 0 0-14Z M12 9.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5Z M12 2v3 M12 19v3 M2 12h3 M19 12h3" />
+            </svg>
+            Use my location
+          </button>
+          <fieldset class="segmented" id="standard-switch">
+            <legend class="visually-hidden">AQI scale</legend>
+            <label><input type="radio" name="standard" value="us" /><span>US EPA</span></label>
+            <label><input type="radio" name="standard" value="in" /><span>India</span></label>
+          </fieldset>
+          <button type="button" id="motion-toggle" class="button button-ghost motion-toggle">Pause animation</button>
+        </div>
       </div>
-      <fieldset class="scale-switch" id="standard-switch">
-        <legend>AQI scale</legend>
-        <label><input type="radio" name="standard" value="us" /><span>US EPA</span></label>
-        <label><input type="radio" name="standard" value="in" /><span>India CPCB</span></label>
-      </fieldset>
     </header>
 
     <main id="main" tabindex="-1">
-      <section class="finder wrap" aria-labelledby="finder-title">
-        <h2 id="finder-title" class="visually-hidden">Choose a place</h2>
-        <form id="search-form" role="search" novalidate>
-          <label for="city" class="finder-label">City or town</label>
-          <div class="finder-row">
-            <input
-              id="city"
-              name="city"
-              type="search"
-              inputmode="search"
-              autocomplete="address-level2"
-              maxlength="80"
-              spellcheck="false"
-              aria-describedby="search-status"
-              required
-            />
-            <button type="submit" class="button">Search</button>
-            <button type="button" id="locate" class="button button-quiet">Use my location</button>
-          </div>
-        </form>
-        <p id="search-status" class="status" role="status"></p>
-        <ul id="results" class="results" aria-label="Matching places" hidden></ul>
-      </section>
-
-      <section id="now" class="sky" aria-labelledby="now-title" data-level="0">
-        <div id="now-body" class="sky-inner wrap">
-          <h2 id="now-title">See the air where you are</h2>
+      <div class="wrap stack">
+        <div class="finder-feedback">
+          <p id="search-status" class="status" role="status"></p>
+          <ul id="results" class="results" aria-label="Matching places" hidden></ul>
         </div>
-      </section>
 
-      <div class="columns wrap">
-        <div class="column-main">
-          <section id="advice" class="block" aria-labelledby="advice-title">
-            <h2 id="advice-title">What to do</h2>
-            <div id="advice-body"></div>
-          </section>
-          <section id="forecast" class="block" aria-labelledby="forecast-title">
-            <h2 id="forecast-title">Next 48 hours</h2>
+        <section id="now" class="hero" aria-labelledby="now-title" data-level="0">
+          <div id="now-body" class="hero-body">
+            <h2 id="now-title">See the air where you are</h2>
+          </div>
+        </section>
+
+        <section id="pollutants" class="section" aria-labelledby="pollutants-title" data-reveal>
+          <h2 id="pollutants-title" class="section-title">Pollutants</h2>
+          <div id="pollutants-body"></div>
+        </section>
+
+        <div class="split">
+          <section id="forecast" class="card" aria-labelledby="forecast-title" data-reveal>
+            <h2 id="forecast-title" class="section-title">Next 48 hours</h2>
             <div id="forecast-body"></div>
           </section>
-        </div>
 
-        <div class="column-side">
-          <section id="assistant" class="panel" aria-labelledby="assistant-title">
-            <h2 id="assistant-title">Ask AirWise</h2>
+          <section id="assistant" class="card card-chat" aria-labelledby="assistant-title" data-reveal>
+            <h2 id="assistant-title" class="section-title">Ask AirWise</h2>
             <div id="chat-log" class="chat-log" role="log" aria-labelledby="assistant-title" tabindex="0"></div>
             <div id="suggestions" class="suggestions" role="group" aria-label="Suggested questions"></div>
             <form id="chat-form" class="chat-form" novalidate>
@@ -91,9 +107,16 @@
               <button type="submit" class="button">Ask</button>
             </form>
           </section>
+        </div>
 
-          <section id="profile" class="block" aria-labelledby="profile-title">
-            <h2 id="profile-title">About you</h2>
+        <div class="split split-even">
+          <section id="advice" class="card" aria-labelledby="advice-title" data-reveal>
+            <h2 id="advice-title" class="section-title">What to do</h2>
+            <div id="advice-body"></div>
+          </section>
+
+          <section id="profile" class="card" aria-labelledby="profile-title" data-reveal>
+            <h2 id="profile-title" class="section-title">About you</h2>
             <p class="hint">Advice adapts to your answers. They are saved only in this browser.</p>
             <form id="profile-form" class="profile-form"></form>
           </section>

@@ -2,7 +2,7 @@ import { describeError } from './api/http';
 import { roundCoordinate, sanitizeQuery, type AirQualityData, type OpenMeteoClient, type Place } from './api/openMeteo';
 import { MAX_QUESTION_LENGTH } from './assistant/intents';
 import { ask, SAMPLE_QUESTIONS, type AssistantContext } from './assistant/respond';
-import { isAqiStandardId } from './domain/aqi/standards';
+import { AQI_STANDARDS, isAqiStandardId } from './domain/aqi/standards';
 import { isActivity, isSensitivityGroup, type HealthProfile } from './domain/profile';
 import { buildAirView, type AirView } from './state/airView';
 import {
@@ -14,12 +14,14 @@ import {
 } from './state/preferences';
 import { createStore } from './state/store';
 import { renderAdvice } from './ui/components/advicePanel';
-import { chatMessage, suggestionButtons } from './ui/components/chat';
+import { chatMessage, suggestionButtons, typingIndicator } from './ui/components/chat';
 import { renderForecast } from './ui/components/forecastPanel';
 import { placeResults, profileFields } from './ui/components/forms';
-import { renderSky, SKY_HEADING_ID, type LoadStatus } from './ui/components/sky';
+import { HERO_HEADING_ID, renderHero, type LoadStatus } from './ui/components/hero';
+import { renderPollutants } from './ui/components/pollutantsPanel';
 import { byId } from './ui/dom';
-import { animateNumber } from './ui/motion';
+import { animateNumber, prefersReducedMotion } from './ui/motion';
+import { revealOnScroll } from './ui/reveal';
 
 export interface AppState {
   readonly prefs: Preferences;
@@ -52,6 +54,8 @@ export interface App {
 export const MY_LOCATION_ID = 0;
 const STALE_AFTER_MS = 30 * 60 * 1000;
 const MAX_MESSAGES = 60;
+/** How long the typing indicator shows before an answer, when motion is allowed. */
+export const TYPING_DELAY_MS = 650;
 const PERMISSION_DENIED = 1;
 
 /** Wires the static page shell in `index.html` to state, data and rendering. */
@@ -73,8 +77,9 @@ export function startApp(doc: Document, deps: AppDependencies): App {
     locateButton: byId(doc, 'locate', HTMLButtonElement),
     searchStatus: byId(doc, 'search-status', HTMLElement),
     results: byId(doc, 'results', HTMLUListElement),
-    sky: byId(doc, 'now', HTMLElement),
-    skyBody: byId(doc, 'now-body', HTMLElement),
+    hero: byId(doc, 'now', HTMLElement),
+    heroBody: byId(doc, 'now-body', HTMLElement),
+    pollutantsBody: byId(doc, 'pollutants-body', HTMLElement),
     forecastBody: byId(doc, 'forecast-body', HTMLElement),
     adviceBody: byId(doc, 'advice-body', HTMLElement),
     chatLog: byId(doc, 'chat-log', HTMLElement),
@@ -83,6 +88,7 @@ export function startApp(doc: Document, deps: AppDependencies): App {
     suggestions: byId(doc, 'suggestions', HTMLElement),
     profileForm: byId(doc, 'profile-form', HTMLFormElement),
     standardSwitch: byId(doc, 'standard-switch', HTMLFieldSetElement),
+    motionToggle: byId(doc, 'motion-toggle', HTMLButtonElement),
   };
 
   let results: readonly Place[] = [];
@@ -125,8 +131,9 @@ export function startApp(doc: Document, deps: AppDependencies): App {
   function render(state: AppState): void {
     const view = viewFor(state);
     const current = view?.current ?? null;
-    const sky = renderSky({
+    const hero = renderHero({
       status: state.status,
+      standard: AQI_STANDARDS[state.prefs.standard],
       place: state.place,
       view,
       profile: state.prefs.profile,
@@ -138,23 +145,31 @@ export function startApp(doc: Document, deps: AppDependencies): App {
     const key = current && state.place ? `${state.place.id}|${state.prefs.standard}|${state.fetchedAt ?? 0}` : null;
     const reveal = key !== null && key !== revealedKey;
     if (key !== null) revealedKey = key;
-    ui.sky.classList.toggle('is-revealing', reveal);
-    ui.forecastBody.classList.toggle('is-revealing', reveal);
+    for (const node of [ui.hero, ui.pollutantsBody, ui.forecastBody]) node.classList.toggle('is-revealing', reveal);
 
     stopCounting();
-    ui.sky.dataset.level = String(sky.level);
-    ui.sky.setAttribute('aria-busy', String(state.status === 'loading'));
-    ui.skyBody.replaceChildren(...sky.nodes);
+    // The level tints the whole page (background glow, accents), not just the card.
+    doc.documentElement.dataset.level = String(hero.level);
+    ui.hero.dataset.level = String(hero.level);
+    ui.hero.setAttribute('aria-busy', String(state.status === 'loading'));
+    ui.heroBody.replaceChildren(...hero.nodes);
+    ui.pollutantsBody.replaceChildren(...renderPollutants(view));
     ui.forecastBody.replaceChildren(...renderForecast(view));
     ui.adviceBody.replaceChildren(...renderAdvice(view, state.prefs.profile));
 
-    const valueNode = ui.skyBody.querySelector<HTMLElement>('.reading-value');
+    const valueNode = ui.heroBody.querySelector<HTMLElement>('.reading-value');
     if (valueNode && current && state.place) {
       // Count from the previous reading for the same place (e.g. a scale switch), otherwise from zero.
       const from = !reveal ? current.value : lastShown?.placeId === state.place.id ? lastShown.value : 0;
       stopCounting = animateNumber(valueNode, from, current.value, doc.defaultView ?? {});
       lastShown = { placeId: state.place.id, value: current.value };
     }
+  }
+
+  /** Reflects the pause preference on the page and on the toggle button. */
+  function applyMotionPreference(paused: boolean): void {
+    doc.documentElement.classList.toggle('motion-paused', paused);
+    ui.motionToggle.textContent = paused ? 'Play animation' : 'Pause animation';
   }
 
   function updatePrefs(patch: Partial<Preferences>): void {
@@ -215,7 +230,7 @@ export function startApp(doc: Document, deps: AppDependencies): App {
       setStatus(message, true);
     }
 
-    if (options.focus) doc.getElementById(SKY_HEADING_ID)?.focus();
+    if (options.focus) doc.getElementById(HERO_HEADING_ID)?.focus();
   }
 
   function locate(): void {
@@ -261,9 +276,26 @@ export function startApp(doc: Document, deps: AppDependencies): App {
       view: viewFor(state),
       profile: state.prefs.profile,
     };
-    ui.chatLog.append(chatMessage('user', question), chatMessage('assistant', ask(question, context)));
-    while (ui.chatLog.childElementCount > MAX_MESSAGES) ui.chatLog.firstElementChild?.remove();
-    ui.chatLog.scrollTop = ui.chatLog.scrollHeight;
+    // Answer from the state at the moment of asking, even if it is shown after a short pause.
+    const reply = chatMessage('assistant', ask(question, context));
+    const show = (node: Node) => {
+      ui.chatLog.append(node);
+      while (ui.chatLog.childElementCount > MAX_MESSAGES) ui.chatLog.firstElementChild?.remove();
+      ui.chatLog.scrollTop = ui.chatLog.scrollHeight;
+    };
+
+    show(chatMessage('user', question));
+    const win = doc.defaultView;
+    if (!win || prefersReducedMotion(win) || state.prefs.motionPaused) {
+      show(reply);
+      return;
+    }
+    const typing = typingIndicator();
+    show(typing);
+    win.setTimeout(() => {
+      typing.replaceWith(reply);
+      ui.chatLog.scrollTop = ui.chatLog.scrollHeight;
+    }, TYPING_DELAY_MS);
   }
 
   async function refreshIfStale(): Promise<void> {
@@ -291,7 +323,7 @@ export function startApp(doc: Document, deps: AppDependencies): App {
     if (place) void selectPlace(place, { focus: true });
   });
   ui.locateButton.addEventListener('click', locate);
-  ui.skyBody.addEventListener('click', (event) => {
+  ui.heroBody.addEventListener('click', (event) => {
     const { place } = store.getState();
     if (place && (event.target as Element).closest('[data-action="retry"]')) void selectPlace(place, { focus: true });
   });
@@ -301,6 +333,9 @@ export function startApp(doc: Document, deps: AppDependencies): App {
   });
   ui.profileForm.addEventListener('change', () => {
     updatePrefs({ profile: readProfile() });
+  });
+  ui.motionToggle.addEventListener('click', () => {
+    updatePrefs({ motionPaused: !store.getState().prefs.motionPaused });
   });
   ui.profileForm.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -324,6 +359,8 @@ export function startApp(doc: Document, deps: AppDependencies): App {
     radio.checked = radio.value === prefs.standard;
   }
   ui.profileForm.replaceChildren(...profileFields(prefs.profile));
+  applyMotionPreference(prefs.motionPaused);
+  revealOnScroll(doc.querySelectorAll('[data-reveal]'), doc.defaultView ?? {});
   ui.suggestions.replaceChildren(...suggestionButtons(SAMPLE_QUESTIONS.slice(0, 4)));
   ui.chatLog.append(
     chatMessage('assistant', "Hi, I'm AirWise. Choose a place, then ask me things like whether it's a good time for a run."),
@@ -332,6 +369,7 @@ export function startApp(doc: Document, deps: AppDependencies): App {
   store.subscribe((state, previous) => {
     render(state);
     if (state.prefs !== previous.prefs) savePreferences(deps.storage, state.prefs);
+    if (state.prefs.motionPaused !== previous.prefs.motionPaused) applyMotionPreference(state.prefs.motionPaused);
   });
   render(store.getState());
   if (prefs.lastPlace) void selectPlace(prefs.lastPlace);
